@@ -1,51 +1,46 @@
-import requests
-import sqlite3
+import os
 from datetime import datetime, timezone
 
+import psycopg
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 
 URL = "https://api.wise.com/v4/comparisons/"
-params = {"sourceCurrency": "GBP", "targetCurrency": "INR", "sendAmount": 1000}
+SOURCE = "GBP"
+TARGETS = ["INR", "PKR", "BDT", "LKR", "PHP", "NGN", "PLN", "EUR", "USD", "AED"]
+SEND_AMOUNT = 1000
 
-response = requests.get(URL, params=params, timeout=10)
-response.raise_for_status()
-data = response.json()
-
+fetched_at = datetime.now(timezone.utc)
 rows = []
-for provider in data["providers"]:
-    quote = provider["quotes"][0]
-    rows.append({
-        "name": provider["name"],
-        "rate": quote["rate"],
-        "fee": quote["fee"],
-        "received": quote["receivedAmount"],
-        "collected": quote["dateCollected"],
-    })
 
-rows.sort(key=lambda row: row["received"], reverse=True)
+for target in TARGETS:
+    params = {"sourceCurrency": SOURCE, "targetCurrency": target, "sendAmount": SEND_AMOUNT}
+    response = requests.get(URL, params=params, timeout=10)
+    response.raise_for_status()
+    providers = response.json()["providers"]
 
-for position, row in enumerate(rows, start=1):
-    print(f"{position:>2}. {row['name']:<22} {row['received']:>12,.2f} INR   rate {row['rate']:.3f}   fee £{row['fee']:.2f}")
+    for provider in providers:
+        if not provider["quotes"]:
+            continue
+        quote = provider["quotes"][0]
+        rows.append((
+            fetched_at, SOURCE, target, provider["name"],
+            quote["rate"], quote["fee"], quote["receivedAmount"], quote["dateCollected"],
+        ))
 
-fetched_at = datetime.now(timezone.utc).isoformat()
+    print(f"{SOURCE} to {target}: {len(providers)} providers")
 
-connection = sqlite3.connect("rates.db")
-connection.execute("""
-    CREATE TABLE IF NOT EXISTS quotes (
-        fetched_at TEXT,
-        provider   TEXT,
-        rate       REAL,
-        fee        REAL,
-        received   REAL,
-        collected  TEXT
-    )
-""")
+with psycopg.connect(os.environ["DATABASE_URL"]) as connection:
+    with connection.cursor() as cursor:
+        cursor.executemany(
+            """
+            insert into quotes
+                (fetched_at, source_currency, target_currency, provider, rate, fee, received, collected)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            rows,
+        )
 
-for row in rows:
-    connection.execute(
-        "INSERT INTO quotes VALUES (?, ?, ?, ?, ?, ?)",
-        (fetched_at, row["name"], row["rate"], row["fee"], row["received"], row["collected"]),
-    )
-
-connection.commit()
-connection.close()
-print(f"Saved {len(rows)} quotes at {fetched_at}")
+print(f"Saved {len(rows)} quotes")
