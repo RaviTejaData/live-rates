@@ -1,0 +1,3 @@
+.venv/
+rates.db
+__pycache__/
