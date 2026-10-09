@@ -1,195 +1,341 @@
-/* One dark look on purpose: near-black ground, violet for actions, mint for the winner, coral for money lost. */
-:root {
-  color-scheme: dark;
-  --bg: #07080F;
-  --panel: #10121D;
-  --panel-2: #171A29;
-  --line: #262A3F;
-  --text: #F4F5FA;
-  --muted: #A3A9C2;
-  --violet: #7566FF;
-  --violet-soft: #2A2560;
-  --mint: #4FE3A1;
-  --coral: #FF8266;
-  --amber: #FFC14D;
-  --display: 'Bricolage Grotesque', 'DM Sans', system-ui, sans-serif;
-  --body: 'DM Sans', system-ui, sans-serif;
+// Where the data lives. The publishable key is safe to show: it can only read quotes.
+const SUPABASE_URL = "https://deuvqizffqssafjigbzy.supabase.co";
+const SUPABASE_KEY = "sb_publishable_j5KZB8bhMM7KSYmrtXiywA_YWH15UyM";
+
+// The ten currencies the hourly job collects. To add one, add it here and in fetch_rates.py.
+const CURRENCIES = [
+  { code: "EUR", flag: "eu", country: "Europe", symbol: "€" },
+  { code: "USD", flag: "us", country: "United States", symbol: "$" },
+  { code: "INR", flag: "in", country: "India", symbol: "₹" },
+  { code: "PKR", flag: "pk", country: "Pakistan", symbol: "₨" },
+  { code: "BDT", flag: "bd", country: "Bangladesh", symbol: "৳" },
+  { code: "LKR", flag: "lk", country: "Sri Lanka", symbol: "Rs\u00a0" },
+  { code: "PHP", flag: "ph", country: "Philippines", symbol: "₱" },
+  { code: "NGN", flag: "ng", country: "Nigeria", symbol: "₦" },
+  { code: "PLN", flag: "pl", country: "Poland", symbol: "zł\u00a0" },
+  { code: "AED", flag: "ae", country: "UAE", symbol: "AED\u00a0" },
+];
+
+// Everything the page needs to remember.
+const state = { currency: CURRENCIES[0], quotes: [], history: [], showAll: false };
+
+const el = id => document.getElementById(id);
+
+// ---------- Getting data ----------
+
+async function ask(query) {
+  const response = await fetch(SUPABASE_URL + "/rest/v1/quotes?" + query, { headers: { apikey: SUPABASE_KEY } });
+  if (!response.ok) throw new Error("Database answered " + response.status);
+  return response.json();
 }
 
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
-
-body {
-  margin: 0;
-  font-family: var(--body);
-  color: var(--text);
-  background: var(--bg);
-  font-size: 17px;
-  line-height: 1.5;
+// The newest batch of quotes for one currency.
+async function loadQuotes(code) {
+  const rows = await ask("select=*&target_currency=eq." + code + "&order=fetched_at.desc&limit=40");
+  return rows.filter(row => row.fetched_at === rows[0].fetched_at);
 }
 
-.wrap { max-width: 1360px; margin: 0 auto; padding-left: 24px; padding-right: 24px; }
-.band { padding-top: 72px; padding-bottom: 72px; }
-
-h1, h2, h3, .payout, .stat, .logo { font-family: var(--display); }
-h2 { margin: 0; font-weight: 800; font-size: clamp(30px, 4vw, 46px); letter-spacing: -0.02em; line-height: 1.1; }
-h3 { margin: 0; font-weight: 800; font-size: 24px; }
-.sub { margin: 10px 0 32px; font-size: 19px; color: var(--muted); max-width: 720px; }
-.small { display: block; font-size: 14px; color: var(--muted); }
-a { color: inherit; }
-a:focus-visible, button:focus-visible, input:focus-visible { outline: 3px solid var(--amber); outline-offset: 3px; }
-
-/* Top bar */
-.nav { position: sticky; top: 0; z-index: 5; background: rgba(7, 8, 15, 0.86); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
-.nav-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 20px; padding-top: 14px; padding-bottom: 14px; }
-.logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 22px; text-decoration: none; }
-.mark { width: 14px; height: 14px; border-radius: 4px; background: var(--mint); transform: rotate(45deg); }
-.nav nav { display: flex; gap: 4px; }
-.nav nav a { padding: 10px 14px; border-radius: 999px; text-decoration: none; font-weight: 500; color: var(--muted); }
-.nav nav a:hover { color: var(--text); background: var(--panel-2); }
-.ticker { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 500; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-variant-numeric: tabular-nums; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--mint); animation: pulse 2s infinite; }
-@keyframes pulse { 50% { opacity: 0.35; } }
-
-/* Hero: the converter is written as a sentence */
-.hero { padding: 72px 0 80px; background: radial-gradient(900px 480px at 12% 0%, #1B1750 0%, rgba(7, 8, 15, 0) 70%); }
-.hero-grid { display: flex; flex-wrap: wrap; gap: 48px; align-items: center; }
-.say { flex: 1.3 1 520px; min-width: 0; }
-.eyebrow { margin: 0 0 20px; font-size: 14px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--amber); }
-h1 { margin: 0; font-weight: 600; font-size: clamp(30px, 4.2vw, 52px); line-height: 1.25; letter-spacing: -0.02em; color: var(--muted); }
-h1 .line { display: block; }
-h1 #country { color: var(--text); }
-.amount-pill { display: inline-flex; align-items: baseline; gap: 4px; padding: 2px 18px; margin: 0 4px; border-radius: 18px; background: var(--panel-2); border: 2px solid var(--violet); color: var(--text); font-weight: 800; }
-.amount-pill input { width: 4.6ch; min-width: 0; border: 0; outline: 0; background: transparent; font: inherit; color: inherit; padding: 0; }
-.payout { margin-top: 12px; font-weight: 800; font-size: clamp(40px, 6.4vw, 100px); line-height: 1; letter-spacing: -0.04em; color: var(--mint); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.with { margin: 16px 0 28px; font-size: 20px; color: var(--muted); }
-.with strong { color: var(--text); }
-.pills { display: flex; flex-wrap: wrap; gap: 8px; }
-.pill { min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--muted); font: inherit; font-size: 15px; font-weight: 500; cursor: pointer; }
-.pill:hover { color: var(--text); border-color: var(--violet); }
-.pill.on { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 700; }
-
-/* The race: top five as bars */
-.race { flex: 1 1 400px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 28px; padding: 28px; }
-.race-head { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 20px; }
-.lane { margin-bottom: 18px; }
-.lane-top { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-weight: 700; }
-.lane-top span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
-.bar { height: 12px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
-.bar i { display: block; height: 100%; border-radius: 999px; background: var(--violet); transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
-.lane.first .bar i { background: var(--mint); }
-.lane.first .lane-top { color: var(--mint); }
-.button { display: flex; align-items: center; justify-content: center; min-height: 54px; padding: 0 24px; margin-top: 8px; border-radius: 16px; border: 0; background: var(--violet); color: white; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
-.button:hover { background: #8577FF; }
-.button.ghost { margin: 0; background: var(--panel-2); border: 1px solid var(--line); }
-
-/* Analysis tiles */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; }
-.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 26px; display: flex; flex-direction: column; gap: 10px; }
-.tile .label { font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-.stat { font-weight: 800; font-size: clamp(34px, 3.4vw, 46px); line-height: 1.05; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.stat.loss { color: var(--coral); }
-.stat.win { color: var(--mint); }
-.tile p { margin: 0; color: var(--muted); font-size: 16px; }
-.meter { position: relative; height: 10px; border-radius: 999px; background: linear-gradient(90deg, var(--coral), var(--amber), var(--mint)); margin: 8px 0 2px; }
-.meter i { position: absolute; top: -6px; width: 6px; height: 22px; margin-left: -3px; border-radius: 3px; background: var(--text); box-shadow: 0 0 0 3px var(--panel); }
-.meter-ends { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-
-/* Full ranking */
-.rows { border: 1px solid var(--line); border-radius: 24px; overflow: hidden; background: var(--panel); }
-.row { display: grid; grid-template-columns: 44px minmax(150px, 1.3fr) minmax(170px, 1.1fr) minmax(160px, 1.5fr) 90px 90px 110px; gap: 16px; align-items: center; padding: 18px 24px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-.row:first-child { border-top: 0; }
-.row.head { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--panel-2); }
-.row.best { background: linear-gradient(90deg, rgba(79, 227, 161, 0.14), rgba(79, 227, 161, 0)); }
-.rank { font-family: var(--display); font-weight: 800; font-size: 20px; color: var(--muted); }
-.row.best .rank { color: var(--mint); }
-.name { font-weight: 700; }
-.lost { display: flex; align-items: center; gap: 12px; }
-.lost .bar { flex: 1; height: 8px; }
-.lost .bar i { background: var(--coral); }
-.lost span { width: 104px; text-align: right; font-size: 15px; white-space: nowrap; color: var(--muted); }
-.row.best .lost span { color: var(--mint); font-weight: 700; }
-.got { font-family: var(--display); font-weight: 800; font-size: 22px; white-space: nowrap; }
-.old { color: var(--amber); font-weight: 700; }
-.row [data-label]::before { display: none; }
-.rows-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-top: 20px; font-size: 15px; color: var(--muted); }
-
-/* History */
-.chart-box { background: var(--panel); border: 1px solid var(--line); border-radius: 24px; padding: 24px; }
-.chart-box svg { display: block; width: 100%; height: auto; }
-.chart-box text { font-family: var(--body); font-size: 13px; fill: var(--muted); }
-.chart-box .now { font-size: 15px; font-weight: 700; fill: var(--text); }
-
-/* How it works */
-#how { border-top: 1px solid var(--line); }
-.steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 24px; margin-top: 32px; }
-.steps p { margin: 8px 0 0; color: var(--muted); }
-.num { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: 14px; background: var(--violet-soft); color: var(--text); font-family: var(--display); font-weight: 800; font-size: 22px; margin-bottom: 14px; }
-
-footer { border-top: 1px solid var(--line); }
-.foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 32px; padding-top: 28px; padding-bottom: 40px; font-size: 15px; color: var(--muted); }
-.foot p { margin: 0; max-width: 760px; }
-
-/* Phones: each ranking row becomes a small card */
-@media (max-width: 860px) {
-  .nav nav { display: none; }
-  .hero { padding: 40px 0 56px; }
-  .payout { font-size: clamp(40px, 11.5vw, 84px); }
-  .row.head { display: none; }
-  .row { grid-template-columns: 32px 1fr auto; gap: 8px 12px; padding: 16px; }
-  .row .lost { grid-column: 1 / -1; }
-  .row [data-label] { grid-column: span 1; font-size: 14px; color: var(--muted); }
-  .row [data-label]::before { display: inline; content: attr(data-label) " "; }
-  .row .rate { grid-column: 1 / 3; }
-  .row .checked { grid-column: 1 / -1; }
+// The best payout in each hourly batch, oldest first, for the chart.
+async function loadHistory(code) {
+  const rows = await ask("select=fetched_at,received&target_currency=eq." + code + "&order=fetched_at.desc&limit=1000");
+  const bestByBatch = new Map();
+  for (const row of rows) {
+    const current = bestByBatch.get(row.fetched_at) || 0;
+    if (row.received > current) bestByBatch.set(row.fetched_at, row.received);
+  }
+  return [...bestByBatch].map(([time, best]) => ({ time: new Date(time), best })).sort((a, b) => a.time - b.time);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  .bar i { transition: none; }
-  .dot { animation: none; }
+// ---------- Small helpers ----------
+
+function money(value) {
+  return state.currency.symbol + value.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/* Flags and provider logos */
-.flag { width: 1.15em; height: 1.15em; border-radius: 50%; object-fit: cover; vertical-align: -0.18em; margin-right: 0.4em; flex: none; }
-.amount-pill .flag { width: 0.7em; height: 0.7em; align-self: center; margin-right: 6px; }
-.pill { display: inline-flex; align-items: center; }
-.badge { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex: none; border-radius: 10px; background: white; color: #07080F; font-family: var(--body); font-size: 13px; font-weight: 700; overflow: hidden; }
-.badge img { width: 100%; height: 100%; object-fit: contain; padding: 5px; }
-.who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.with .badge { width: 30px; height: 30px; border-radius: 8px; vertical-align: -8px; margin: 0 8px 0 4px; }
-
-/* Phone fixes: one-line amounts, long provider names, no blur or flicker */
-.payout { white-space: nowrap; overflow: hidden; overflow-wrap: normal; }
-.nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lane-top { align-items: center; }
-.lane-top .who { flex: 1; }
-.lane-top > span:last-child { flex: none; }
-.flag { background: var(--panel-2); }
-.pill { -webkit-tap-highlight-color: transparent; touch-action: manipulation; white-space: nowrap; }
-.stat { overflow-wrap: normal; }
-@media (max-width: 860px) {
-  .nav { backdrop-filter: none; background: var(--bg); }
-  .race { padding: 20px; }
-  .lane-top { font-size: 15px; gap: 10px; }
-  .row .name { min-width: 0; }
-  .row .name .nm { white-space: normal; overflow: visible; }
-  .got { font-size: 18px; }
-  .stat { font-size: 32px; }
-  .amount-pill input { font-size: inherit; }
-}
-@media (hover: none) {
-  .pill:hover { color: var(--muted); border-color: var(--line); }
-  .pill.on:hover { color: var(--bg); border-color: var(--text); }
+function whole(value) {
+  return state.currency.symbol + Math.round(value).toLocaleString("en-GB");
 }
 
-/* Phone ranking rows: the amount gets its own line so it can never sit on top of a long name */
-@media (max-width: 860px) {
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 16px; }
-  .row .rank { width: 24px; }
-  .row .name { flex: 1 1 0; }
-  .row .name .nm { overflow-wrap: anywhere; }
-  .row .got { flex: 1 1 100%; font-size: 24px; white-space: normal; overflow-wrap: anywhere; }
-  .row .lost { flex: 1 1 100%; }
-  .row [data-label] { font-size: 14px; color: var(--muted); }
+function ago(timestamp) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(timestamp)) / 60000));
+  if (minutes < 60) return minutes + " min ago";
+  if (minutes < 1440) return Math.round(minutes / 60) + " hr ago";
+  return Math.round(minutes / 1440) + " days ago";
 }
+
+function isOld(timestamp) {
+  return Date.now() - new Date(timestamp) > 24 * 60 * 60 * 1000;
+}
+
+function safe(text) {
+  return String(text).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function amount() {
+  return parseFloat(el("amount").value) || 0;
+}
+
+// Every provider with what it pays for the typed amount, best first.
+function ranked() {
+  const list = state.quotes.map(q => ({ ...q, got: Math.max(0, amount() - q.fee) * q.rate }));
+  list.sort((a, b) => b.got - a.got);
+  return list;
+}
+
+// ---------- Flags and logos ----------
+
+// Country flags come from flagcdn.com, a free flag image service.
+function flag(code) {
+  return `<img class="flag" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" onerror="this.remove()">`;
+}
+
+// Provider logos come from the same public source as the quotes.
+// Names that don't follow the usual pattern are listed here.
+const LOGO_NAMES = { "WorldRemit": "world-remit", "ICICI Bank": "icici", "Santander UK": "santander" };
+
+function logo(name) {
+  const slug = LOGO_NAMES[name] || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const words = name.split(" ");
+  const initials = (words[0][0] + (words[1] ? words[1][0] : words[0][1] || "")).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  // If a logo is missing, the badge shows the provider's initials instead.
+  return `<span class="badge"><img src="https://dq8dwmysp7hk1.cloudfront.net/logos/${slug}-mark.svg" alt="" loading="lazy" onerror="this.replaceWith('${initials}')"></span>`;
+}
+
+// ---------- Drawing the page ----------
+
+// The currency buttons are built once. After that only the highlight moves,
+// so the flags don't reload and flicker on every tap or keystroke.
+function renderPills() {
+  const box = el("pills");
+  if (!box.children.length) {
+    box.innerHTML = CURRENCIES.map(c =>
+      `<button type="button" class="pill" data-code="${c.code}">${flag(c.flag)}${c.country} · ${c.code}</button>`
+    ).join("");
+  }
+  for (const pill of box.children) {
+    const on = pill.dataset.code === state.currency.code;
+    pill.classList.toggle("on", on);
+    pill.setAttribute("aria-pressed", on);
+  }
+  if (el("country").dataset.code !== state.currency.code) {
+    el("country").dataset.code = state.currency.code;
+    el("country").innerHTML = flag(state.currency.flag) + state.currency.country;
+    el("eyebrow").textContent = "GBP to " + state.currency.code + ", compared after fees";
+  }
+}
+
+// Shrinks the big number until it fits on one line, whatever the screen width.
+function fitPayout() {
+  const box = el("bestAmount");
+  box.style.fontSize = "";
+  let size = parseFloat(getComputedStyle(box).fontSize);
+  while (box.scrollWidth > box.clientWidth && size > 22) {
+    size -= 2;
+    box.style.fontSize = size + "px";
+  }
+}
+
+// The sentence at the top and the five-lane race beside it.
+function renderHero(list) {
+  const best = list[0];
+  el("bestAmount").textContent = money(best.got);
+  fitPayout();
+  el("bestLine").innerHTML = "with " + logo(best.provider) + "<strong>" + safe(best.provider) + "</strong>, today's best deal. Quote checked " + ago(best.collected) + ".";
+  const wise = state.quotes.find(q => q.provider === "Wise");
+  el("ticker").textContent = wise
+    ? "Market rate £1 = " + state.currency.symbol + wise.rate.toFixed(3)
+    : "Updated " + ago(best.fetched_at);
+
+  const top = list.slice(0, 5);
+  const floor = top[top.length - 1].got;
+  const span = best.got - floor;
+  el("race").innerHTML = top.map((q, i) => {
+    const width = span > 0 ? 45 + 55 * (q.got - floor) / span : 100;
+    return `
+      <div class="lane ${i === 0 ? "first" : ""}">
+        <div class="lane-top"><span class="who">${logo(q.provider)}<span class="nm">${safe(q.provider)}</span></span><span>${money(q.got)}</span></div>
+        <div class="bar"><i style="width:${width.toFixed(1)}%"></i></div>
+      </div>`;
+  }).join("");
+  el("raceNote").textContent = "Top " + top.length + " of " + list.length;
+}
+
+// Four numbers worked out from the quotes and the history.
+function renderInsights(list) {
+  const best = list[0];
+  const worst = list[list.length - 1];
+  const sent = amount();
+  const tiles = [];
+
+  tiles.push(`
+    <div class="tile">
+      <span class="label">Cost of a bad choice</span>
+      <div class="stat loss">${whole(best.got - worst.got)}</div>
+      <p>That is how much less arrives with ${safe(worst.provider)}, the lowest offer, than with ${safe(best.provider)}.</p>
+    </div>`);
+
+  const wise = state.quotes.find(q => q.provider === "Wise");
+  if (wise && sent > 0) {
+    const cost = (1 - best.got / (sent * wise.rate)) * 100;
+    tiles.push(`
+      <div class="tile">
+        <span class="label">Best deal against the market</span>
+        <div class="stat ${cost <= 0 ? "win" : ""}">${Math.abs(cost).toFixed(2)}%</div>
+        <p>${cost <= 0 ? "Better than the market rate, usually because of a promotional offer." : "The total cost of the best deal, compared with the market rate that banks trade at."}</p>
+      </div>`);
+  }
+
+  const points = state.history.map(p => p.best);
+  if (points.length >= 3) {
+    const latest = points[points.length - 1];
+    const low = Math.min(...points), high = Math.max(...points);
+    const place = high > low ? (latest - low) / (high - low) * 100 : 50;
+    const word = place >= 67 ? "A good moment" : place >= 34 ? "A middling moment" : "A weak moment";
+    tiles.push(`
+      <div class="tile">
+        <span class="label">Is now a good time?</span>
+        <div class="stat">${word}</div>
+        <div><div class="meter"><i style="left:${place.toFixed(0)}%"></i></div>
+        <div class="meter-ends"><span>Lowest ${whole(low)}</span><span>Highest ${whole(high)}</span></div></div>
+        <p>Where the latest best payout sits among ${points.length} hourly readings for £1,000.</p>
+      </div>`);
+  } else {
+    tiles.push(`
+      <div class="tile">
+        <span class="label">Is now a good time?</span>
+        <div class="stat">Collecting</div>
+        <p>This compares today with past readings. It appears once a few hours of history are saved.</p>
+      </div>`);
+  }
+
+  const fresh = list.filter(q => !isOld(q.collected)).length;
+  tiles.push(`
+    <div class="tile">
+      <span class="label">Quote freshness</span>
+      <div class="stat">${fresh} of ${list.length}</div>
+      <p>Quotes checked in the last 24 hours. Older ones are marked in amber in the ranking.</p>
+    </div>`);
+
+  el("insights").innerHTML = `
+    <div class="wrap band">
+      <h2>What the numbers say</h2>
+      <p class="sub">For £${sent.toLocaleString("en-GB")} sent to ${state.currency.country}.</p>
+      <div class="tiles">${tiles.join("")}</div>
+    </div>`;
+}
+
+function renderTable(list) {
+  const best = list[0];
+  const span = best.got - list[list.length - 1].got;
+  const shown = state.showAll ? list : list.slice(0, 8);
+  const rows = shown.map((q, i) => {
+    const lost = best.got - q.got;
+    const width = span > 0 ? (lost / span * 100).toFixed(1) : 0;
+    return `
+      <div class="row ${i === 0 ? "best" : ""}">
+        <span class="rank">${i + 1}</span>
+        <span class="name who">${logo(q.provider)}<span class="nm">${safe(q.provider)}</span></span>
+        <span class="got">${money(q.got)}</span>
+        <span class="lost"><span class="bar"><i style="width:${width}%"></i></span><span>${i === 0 ? "Best deal" : whole(lost) + " less"}</span></span>
+        <span class="rate" data-label="Rate">${q.rate.toFixed(3)}</span>
+        <span data-label="Fee">${q.fee ? "£" + q.fee.toFixed(2) : "No fee"}</span>
+        <span class="checked ${isOld(q.collected) ? "old" : ""}" data-label="Checked">${ago(q.collected)}</span>
+      </div>`;
+  }).join("");
+  const toggle = list.length > 8
+    ? `<button type="button" class="button ghost" id="toggle">${state.showAll ? "Show top 8 only" : "Show all " + list.length + " providers"}</button>`
+    : "";
+  el("compare").innerHTML = `
+    <div class="wrap band">
+      <h2>Every provider, best to worst</h2>
+      <p class="sub">The coral bar shows how much less arrives than with the best deal.</p>
+      <div class="rows">
+        <div class="row head"><span>#</span><span>Provider</span><span>They receive</span><span>Compared with the best</span><span>Rate</span><span>Fee</span><span>Checked</span></div>
+        ${rows}
+      </div>
+      <div class="rows-foot">
+        <span>Amber in the last column means the quote is more than a day old and may have changed.</span>
+        ${toggle}
+      </div>
+    </div>`;
+}
+
+function renderHistory() {
+  const points = state.history;
+  let body;
+  if (points.length < 2) {
+    body = `<p class="sub">History is still collecting. The chart appears here once there are at least two hourly readings.</p>`;
+  } else {
+    const W = 1200, H = 320, left = 10, right = 150, top = 30, bottom = 40;
+    const values = points.map(p => p.best);
+    const low = Math.min(...values), high = Math.max(...values);
+    const range = high - low || 1;
+    const t0 = points[0].time, t1 = points[points.length - 1].time;
+    const x = p => left + (p.time - t0) / (t1 - t0) * (W - left - right);
+    const y = p => top + (high - p.best) / range * (H - top - bottom);
+    const line = points.map((p, i) => (i ? "L" : "M") + x(p).toFixed(1) + " " + y(p).toFixed(1)).join(" ");
+    const last = points[points.length - 1];
+    const floor = H - bottom;
+    const day = d => d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    body = `
+      <p class="sub">The best payout for £1,000 sent to ${state.currency.country}, hour by hour. Highest so far: ${whole(high)}. Lowest: ${whole(low)}.</p>
+      <div class="chart-box">
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Best payout for 1,000 pounds over time">
+          <line x1="${left}" y1="${top}" x2="${W - right}" y2="${top}" stroke="#262A3F"></line>
+          <line x1="${left}" y1="${floor}" x2="${W - right}" y2="${floor}" stroke="#3A3F5C"></line>
+          <path d="${line} L${x(last).toFixed(1)} ${floor} L${left} ${floor} Z" fill="#1D1A45"></path>
+          <path d="${line}" fill="none" stroke="#7566FF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></path>
+          <circle cx="${x(last).toFixed(1)}" cy="${y(last).toFixed(1)}" r="8" fill="#4FE3A1" stroke="#10121D" stroke-width="4"></circle>
+          <text class="now" x="${(x(last) + 16).toFixed(1)}" y="${(y(last) + 5).toFixed(1)}">${whole(last.best)}</text>
+          <text x="${left}" y="${H - 12}">${day(t0)}</text>
+          <text x="${W - right}" y="${H - 12}" text-anchor="end">${day(t1)}</text>
+        </svg>
+      </div>`;
+  }
+  el("history").innerHTML = `<div class="wrap band"><h2>How the rate has moved</h2>${body}</div>`;
+}
+
+function render() {
+  renderPills();
+  if (!state.quotes.length) return;
+  const list = ranked();
+  renderHero(list);
+  renderInsights(list);
+  renderTable(list);
+}
+
+// ---------- Reacting to the visitor ----------
+
+async function chooseCurrency(code) {
+  state.currency = CURRENCIES.find(c => c.code === code);
+  state.showAll = false;
+  renderPills();
+  try {
+    const [quotes, history] = await Promise.all([loadQuotes(code), loadHistory(code)]);
+    if (state.currency.code !== code) return;   // the visitor already tapped another currency
+    state.quotes = quotes;
+    state.history = history;
+    render();
+    renderHistory();
+  } catch (error) {
+    el("bestLine").textContent = "Could not load quotes just now. Please refresh in a minute.";
+    console.error(error);
+  }
+}
+
+el("amount").addEventListener("input", render);
+window.addEventListener("resize", fitPayout);
+
+el("pills").addEventListener("click", event => {
+  const pill = event.target.closest(".pill");
+  if (pill) chooseCurrency(pill.dataset.code);
+});
+
+el("compare").addEventListener("click", event => {
+  if (event.target.id === "toggle") {
+    state.showAll = !state.showAll;
+    render();
+  }
+});
+
+chooseCurrency(CURRENCIES[0].code);
