@@ -4,16 +4,16 @@ const SUPABASE_KEY = "sb_publishable_j5KZB8bhMM7KSYmrtXiywA_YWH15UyM";
 
 // The ten currencies the hourly job collects. To add one, add it here and in fetch_rates.py.
 const CURRENCIES = [
-  { code: "EUR", country: "Europe", symbol: "€" },
-  { code: "USD", country: "United States", symbol: "$" },
-  { code: "INR", country: "India", symbol: "₹" },
-  { code: "PKR", country: "Pakistan", symbol: "₨" },
-  { code: "BDT", country: "Bangladesh", symbol: "৳" },
-  { code: "LKR", country: "Sri Lanka", symbol: "Rs " },
-  { code: "PHP", country: "Philippines", symbol: "₱" },
-  { code: "NGN", country: "Nigeria", symbol: "₦" },
-  { code: "PLN", country: "Poland", symbol: "zł " },
-  { code: "AED", country: "UAE", symbol: "AED " },
+  { code: "EUR", flag: "eu", country: "Europe", symbol: "€" },
+  { code: "USD", flag: "us", country: "United States", symbol: "$" },
+  { code: "INR", flag: "in", country: "India", symbol: "₹" },
+  { code: "PKR", flag: "pk", country: "Pakistan", symbol: "₨" },
+  { code: "BDT", flag: "bd", country: "Bangladesh", symbol: "৳" },
+  { code: "LKR", flag: "lk", country: "Sri Lanka", symbol: "Rs " },
+  { code: "PHP", flag: "ph", country: "Philippines", symbol: "₱" },
+  { code: "NGN", flag: "ng", country: "Nigeria", symbol: "₦" },
+  { code: "PLN", flag: "pl", country: "Poland", symbol: "zł " },
+  { code: "AED", flag: "ae", country: "UAE", symbol: "AED " },
 ];
 
 // Everything the page needs to remember.
@@ -82,13 +82,32 @@ function ranked() {
   return list;
 }
 
+// ---------- Flags and logos ----------
+
+// Country flags come from flagcdn.com, a free flag image service.
+function flag(code) {
+  return `<img class="flag" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" onerror="this.remove()">`;
+}
+
+// Provider logos come from the same public source as the quotes.
+// Names that don't follow the usual pattern are listed here.
+const LOGO_NAMES = { "WorldRemit": "world-remit", "ICICI Bank": "icici", "Santander UK": "santander" };
+
+function logo(name) {
+  const slug = LOGO_NAMES[name] || name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const words = name.split(" ");
+  const initials = (words[0][0] + (words[1] ? words[1][0] : words[0][1] || "")).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  // If a logo is missing, the badge shows the provider's initials instead.
+  return `<span class="badge"><img src="https://dq8dwmysp7hk1.cloudfront.net/logos/${slug}-mark.svg" alt="" loading="lazy" onerror="this.replaceWith('${initials}')"></span>`;
+}
+
 // ---------- Drawing the page ----------
 
 function renderPills() {
   el("pills").innerHTML = CURRENCIES.map(c =>
-    `<button type="button" class="pill ${c.code === state.currency.code ? "on" : ""}" data-code="${c.code}" aria-pressed="${c.code === state.currency.code}">${c.country} · ${c.code}</button>`
+    `<button type="button" class="pill ${c.code === state.currency.code ? "on" : ""}" data-code="${c.code}" aria-pressed="${c.code === state.currency.code}">${flag(c.flag)}${c.country} · ${c.code}</button>`
   ).join("");
-  el("country").textContent = state.currency.country;
+  el("country").innerHTML = flag(state.currency.flag) + state.currency.country;
   el("eyebrow").textContent = "GBP to " + state.currency.code + ", compared after fees";
 }
 
@@ -96,7 +115,7 @@ function renderPills() {
 function renderHero(list) {
   const best = list[0];
   el("bestAmount").textContent = money(best.got);
-  el("bestLine").innerHTML = "with <strong>" + safe(best.provider) + "</strong>, today's best deal. Quote checked " + ago(best.collected) + ".";
+  el("bestLine").innerHTML = "with " + logo(best.provider) + "<strong>" + safe(best.provider) + "</strong>, today's best deal. Quote checked " + ago(best.collected) + ".";
   const wise = state.quotes.find(q => q.provider === "Wise");
   el("ticker").textContent = wise
     ? "Market rate £1 = " + state.currency.symbol + wise.rate.toFixed(3)
@@ -109,7 +128,7 @@ function renderHero(list) {
     const width = span > 0 ? 45 + 55 * (q.got - floor) / span : 100;
     return `
       <div class="lane ${i === 0 ? "first" : ""}">
-        <div class="lane-top"><span>${i + 1}. ${safe(q.provider)}</span><span>${money(q.got)}</span></div>
+        <div class="lane-top"><span class="who">${logo(q.provider)}${safe(q.provider)}</span><span>${money(q.got)}</span></div>
         <div class="bar"><i style="width:${width.toFixed(1)}%"></i></div>
       </div>`;
   }).join("");
@@ -190,7 +209,7 @@ function renderTable(list) {
     return `
       <div class="row ${i === 0 ? "best" : ""}">
         <span class="rank">${i + 1}</span>
-        <span class="name">${safe(q.provider)}</span>
+        <span class="name who">${logo(q.provider)}${safe(q.provider)}</span>
         <span class="got">${money(q.got)}</span>
         <span class="lost"><span class="bar"><i style="width:${width}%"></i></span><span>${i === 0 ? "Best deal" : whole(lost) + " less"}</span></span>
         <span class="rate" data-label="Rate">${q.rate.toFixed(3)}</span>
