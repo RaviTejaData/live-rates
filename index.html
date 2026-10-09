@@ -5,51 +5,48 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Live Rates</title>
   <meta name="description" content="Compare what banks and transfer services really pay out when you send pounds abroad, after fees.">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap">
+  <meta name="theme-color" content="#07080F">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=DM+Sans:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <section class="hero">
-    <div class="wrap">
-      <header class="topbar">
-        <div class="logo">Live Rates</div>
-        <nav>
-          <a href="#compare">Compare</a>
-          <a href="#how">How it works</a>
-          <a href="#history">Rate history</a>
-        </nav>
-      </header>
-      <div class="hero-grid">
-        <div>
-          <div class="ticker"><span class="dot"></span><span id="ticker">Loading market rate...</span></div>
-          <h1>Send money home. Get the most at the other end.</h1>
-          <p class="lead">We compare banks and transfer services side by side, after fees, so you can see who pays out the most.</p>
-        </div>
-        <div class="card">
-          <label for="amount">You send</label>
-          <div class="field">
-            <span>£</span>
-            <input id="amount" type="text" inputmode="decimal" value="1000">
-            <span class="chip">GBP</span>
-          </div>
-          <div class="label">They get, with today's best deal</div>
-          <div class="field result">
-            <span id="bestAmount">...</span>
-            <span class="chip" id="bestCode">INR</span>
-          </div>
-          <p id="bestLine" class="note">Loading quotes...</p>
-          <div class="label">Send to</div>
-          <div id="pills" class="pills"></div>
-          <a class="button dark" href="#compare">Compare all providers</a>
-        </div>
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="logo" href="#top"><span class="mark"></span>Live Rates</a>
+      <nav>
+        <a href="#insights">Analysis</a>
+        <a href="#compare">Ranking</a>
+        <a href="#history">History</a>
+      </nav>
+      <div class="ticker"><span class="dot"></span><span id="ticker">Loading...</span></div>
+    </div>
+  </header>
+
+  <section class="hero" id="top">
+    <div class="wrap hero-grid">
+      <div class="say">
+        <p class="eyebrow" id="eyebrow">GBP to EUR, compared after fees</p>
+        <h1>
+          <span class="line">Send <label class="amount-pill"><span>£</span><input id="amount" type="text" inputmode="decimal" value="1000" aria-label="Amount in pounds"></label></span>
+          <span class="line">to <span id="country">Europe</span> and they get</span>
+        </h1>
+        <div class="payout" id="bestAmount">...</div>
+        <p class="with" id="bestLine">Loading quotes...</p>
+        <div id="pills" class="pills"></div>
+      </div>
+      <div class="race" aria-label="Top five providers">
+        <div class="race-head"><span>The race right now</span><span id="raceNote"></span></div>
+        <div id="race"></div>
+        <a class="button" href="#compare">See the full ranking</a>
       </div>
     </div>
   </section>
 
-  <section id="top3" class="soft"></section>
+  <section id="insights"></section>
   <section id="compare"></section>
+  <section id="history"></section>
 
-  <section id="how" class="dark">
+  <section id="how">
     <div class="wrap band">
       <h2>How it works</h2>
       <div class="steps">
@@ -59,8 +56,6 @@
       </div>
     </div>
   </section>
-
-  <section id="history"></section>
 
   <footer>
     <div class="wrap foot">
