@@ -193,3 +193,36 @@ footer { border-top: 1px solid var(--line); }
   .row .lost { flex: 1 1 100%; }
   .row [data-label] { font-size: 14px; color: var(--muted); }
 }
+
+/* Where the cost hides: one stacked bar per provider */
+#breakdown { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 24px; font-size: 15px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { width: 14px; height: 14px; border-radius: 4px; }
+.part-rate { background: var(--violet); }
+.part-fee { background: var(--amber); }
+.cost-list { display: flex; flex-direction: column; gap: 18px; }
+.cost-row { display: grid; grid-template-columns: minmax(150px, 1.1fr) minmax(160px, 2fr) minmax(190px, 1.2fr); gap: 20px; align-items: center; font-weight: 700; }
+.cost-bar { display: flex; gap: 2px; height: 18px; border-radius: 6px; background: var(--panel-2); overflow: hidden; }
+.cost-bar i { display: block; height: 100%; transition: width 0.5s ease; }
+.cost-text { text-align: right; font-variant-numeric: tabular-nums; }
+.cost-text .small { font-weight: 400; }
+
+/* Scorecard */
+.score-row { display: grid; grid-template-columns: 44px minmax(160px, 1.5fr) minmax(170px, 1.4fr) 1fr 1fr 1.1fr; gap: 16px; align-items: center; padding: 18px 24px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.score-row:first-child { border-top: 0; }
+.score-row.head { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--panel-2); }
+.score-row [data-label] { display: flex; align-items: center; gap: 12px; }
+.meter-bar { flex: 1; height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.meter-bar i { display: block; height: 100%; border-radius: 999px; background: var(--mint); }
+
+@media (max-width: 860px) {
+  .cost-row { grid-template-columns: 1fr; gap: 8px; }
+  .cost-text { text-align: left; }
+  .score-row.head { display: none; }
+  .score-row { grid-template-columns: 28px 1fr; gap: 8px 12px; padding: 16px; }
+  .score-row [data-label] { grid-column: 2; justify-content: space-between; font-size: 15px; }
+  .score-row [data-label]::before { content: attr(data-label); color: var(--muted); }
+  .score-row .meter-bar { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .cost-bar i { transition: none; } }
