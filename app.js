@@ -17,7 +17,7 @@ const CURRENCIES = [
 ];
 
 // Everything the page needs to remember.
-const state = { currency: CURRENCIES[0], quotes: [], history: [], showAll: false };
+const state = { currency: CURRENCIES[0], quotes: [], history: [], scores: { batches: 0, list: [] }, showAll: false };
 
 const el = id => document.getElementById(id);
 
@@ -37,13 +37,44 @@ async function loadQuotes(code) {
 
 // The best payout in each hourly batch, oldest first, for the chart.
 async function loadHistory(code) {
-  const rows = await ask("select=fetched_at,received&target_currency=eq." + code + "&order=fetched_at.desc&limit=1000");
-  const bestByBatch = new Map();
+  const rows = await ask("select=fetched_at,provider,received&target_currency=eq." + code + "&order=fetched_at.desc&limit=1000");
+  const batches = new Map();
   for (const row of rows) {
-    const current = bestByBatch.get(row.fetched_at) || 0;
-    if (row.received > current) bestByBatch.set(row.fetched_at, row.received);
+    if (!batches.has(row.fetched_at)) batches.set(row.fetched_at, []);
+    batches.get(row.fetched_at).push(row);
   }
-  return [...bestByBatch].map(([time, best]) => ({ time: new Date(time), best })).sort((a, b) => a.time - b.time);
+  state.scores = scorecard([...batches.values()]);
+  return [...batches].map(([time, list]) => ({ time: new Date(time), best: Math.max(...list.map(r => r.received)) }))
+    .sort((a, b) => a.time - b.time);
+}
+
+// Looks at every saved batch and works out how each provider has done over time:
+// how often it was the best deal, its average position, and how far behind the best it usually is.
+function scorecard(batches) {
+  const byProvider = new Map();
+  for (const batch of batches) {
+    const sorted = [...batch].sort((a, b) => b.received - a.received);
+    const best = sorted[0].received;
+    sorted.forEach((row, index) => {
+      if (!byProvider.has(row.provider)) byProvider.set(row.provider, { provider: row.provider, seen: 0, wins: 0, top3: 0, rankSum: 0, behindSum: 0 });
+      const s = byProvider.get(row.provider);
+      s.seen += 1;
+      s.rankSum += index + 1;
+      s.behindSum += best - row.received;
+      if (index === 0) s.wins += 1;
+      if (index < 3) s.top3 += 1;
+    });
+  }
+  const list = [...byProvider.values()].map(s => ({
+    provider: s.provider,
+    seen: s.seen,
+    winRate: s.wins / s.seen * 100,
+    top3Rate: s.top3 / s.seen * 100,
+    avgRank: s.rankSum / s.seen,
+    avgBehind: s.behindSum / s.seen,
+  }));
+  list.sort((a, b) => a.avgRank - b.avgRank);
+  return { batches: batches.length, list };
 }
 
 // ---------- Small helpers ----------
@@ -295,6 +326,68 @@ function renderHistory() {
   el("history").innerHTML = `<div class="wrap band"><h2>How the rate has moved</h2>${body}</div>`;
 }
 
+// Splits each provider's total cost into two parts, measured against the market rate:
+// the part hidden in a weaker exchange rate, and the part charged as a fee.
+function renderBreakdown(list) {
+  const wise = state.quotes.find(q => q.provider === "Wise");
+  const sent = amount();
+  if (!wise || sent <= 0) { el("breakdown").innerHTML = ""; return; }
+  const mid = wise.rate;
+  const rows = list.slice(0, 8).map(q => {
+    const total = sent - q.got / mid;          // pounds lost in all, against the market rate
+    const feeCost = Math.min(q.fee, sent);     // the fee exactly as the provider charges it
+    const rateCost = total - feeCost;          // the rest is hidden in the exchange rate
+    return { q, rateCost, feeCost, total };
+  });
+  const scale = Math.max(...rows.map(r => Math.max(r.rateCost, 0) + r.feeCost), 0.01);
+  const pounds = v => "£" + Math.abs(v).toFixed(2);
+  const html = rows.map(r => `
+    <div class="cost-row">
+      <span class="who">${logo(r.q.provider)}<span class="nm">${safe(r.q.provider)}</span></span>
+      <span class="cost-bar">
+        <i class="part-rate" style="width:${(Math.max(r.rateCost, 0) / scale * 100).toFixed(1)}%"></i>
+        <i class="part-fee" style="width:${(r.feeCost / scale * 100).toFixed(1)}%"></i>
+      </span>
+      <span class="cost-text">
+        <b>${r.total < 0 ? "Beats market by " + pounds(r.total) : pounds(r.total) + " total"}</b>
+        <span class="small">${r.rateCost < 0 ? "rate better than market" : pounds(r.rateCost) + " in the rate"} · ${r.feeCost > 0.005 ? pounds(r.feeCost) + " fee" : "no fee"}</span>
+      </span>
+    </div>`).join("");
+  el("breakdown").innerHTML = `
+    <div class="wrap band">
+      <h2>Where the cost hides</h2>
+      <p class="sub">What sending £${sent.toLocaleString("en-GB")} really costs with each provider, measured against the market rate. Some charge a visible fee. Others charge nothing and take it through a weaker exchange rate.</p>
+      <div class="legend"><span><i class="part-rate"></i>Hidden in the exchange rate</span><span><i class="part-fee"></i>Charged as a fee</span></div>
+      <div class="cost-list">${html}</div>
+    </div>`;
+}
+
+// The long-run record of each provider, built from every saved batch.
+function renderScorecard() {
+  const { batches, list } = state.scores;
+  let body;
+  if (batches < 3) {
+    body = `<p class="sub">The scorecard needs at least three saved readings. It appears here as the hourly data builds up.</p>`;
+  } else {
+    const rows = list.slice(0, 10).map((s, i) => `
+      <div class="score-row">
+        <span class="rank">${i + 1}</span>
+        <span class="name who">${logo(s.provider)}<span class="nm">${safe(s.provider)}</span></span>
+        <span data-label="Best deal"><span class="meter-bar"><i style="width:${s.winRate.toFixed(0)}%"></i></span><b>${s.winRate.toFixed(0)}%</b></span>
+        <span data-label="In the top 3"><b>${s.top3Rate.toFixed(0)}%</b></span>
+        <span data-label="Average position"><b>${s.avgRank.toFixed(1)}</b></span>
+        <span data-label="Usually behind the best by"><b>${s.avgBehind < 0.005 ? "Nothing" : s.avgBehind < 100 ? money(s.avgBehind) : whole(s.avgBehind)}</b></span>
+      </div>`).join("");
+    body = `
+      <p class="sub">How each provider has done across the last ${batches} readings for £1,000 sent to ${state.currency.country}. A provider that wins today is not always the one that wins most often.</p>
+      <div class="rows">
+        <div class="score-row head"><span>#</span><span>Provider</span><span>Was the best deal</span><span>In the top 3</span><span>Average position</span><span>Usually behind by</span></div>
+        ${rows}
+      </div>`;
+  }
+  el("scorecard").innerHTML = `<div class="wrap band"><h2>Who is reliably good</h2>${body}</div>`;
+}
+
 function render() {
   renderPills();
   if (!state.quotes.length) return;
@@ -302,6 +395,8 @@ function render() {
   renderHero(list);
   renderInsights(list);
   renderTable(list);
+  renderBreakdown(list);
+  renderScorecard();
 }
 
 // ---------- Reacting to the visitor ----------
